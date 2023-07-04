@@ -281,8 +281,7 @@ export class ExpressApp {
 
     if (Defaults.RateLimit.createWallet && !opts.ignoreRateLimiter) {
       logger.info(
-        '',
-        'Limiting wallet creation per IP: %d req/h',
+        'Limiting wallet creation per IP: %o req/h',
         ((Defaults.RateLimit.createWallet.max / Defaults.RateLimit.createWallet.windowMs) * 60 * 60 * 1000).toFixed(2)
       );
       createWalletLimiter = new RateLimit(Defaults.RateLimit.createWallet);
@@ -866,8 +865,7 @@ export class ExpressApp {
 
     if (Defaults.RateLimit.estimateFee && !opts.ignoreRateLimiter) {
       logger.info(
-        '',
-        'Limiting estimate fee per IP: %d req/h',
+        'Limiting estimate fee per IP: %o req/h',
         ((Defaults.RateLimit.estimateFee.max / Defaults.RateLimit.estimateFee.windowMs) * 60 * 60 * 1000).toFixed(2)
       );
       estimateFeeLimiter = new RateLimit(Defaults.RateLimit.estimateFee);
@@ -1524,6 +1522,17 @@ export class ExpressApp {
       });
     });
 
+    router.post('/v1/service/moonpay/currencyLimits', async (req, res) => {
+      let server, response;
+      try {
+        server = getServer(req, res);
+        response = await server.moonpayGetCurrencyLimits(req);
+        return res.json(response);
+      } catch (ex) {
+        return returnError(ex, res, req);
+      }
+    });
+
     router.post('/v1/service/moonpay/signedPaymentUrl', (req, res) => {
       getServerWithAuth(req, res, server => {
         let response;
@@ -1593,6 +1602,68 @@ export class ExpressApp {
       }
     });
 
+    router.post('/v1/service/sardine/quote', (req, res) => {
+      getServerWithAuth(req, res, server => {
+        server
+          .sardineGetQuote(req)
+          .then(response => {
+            res.json(response);
+          })
+          .catch(err => {
+            return returnError(err ?? 'unknown', res, req);
+          });
+      });
+    });
+
+    router.post('/v1/service/sardine/getToken', (req, res) => {
+      getServerWithAuth(req, res, server => {
+        server
+          .sardineGetToken(req)
+          .then(response => {
+            res.json(response);
+          })
+          .catch(err => {
+            return returnError(err ?? 'unknown', res, req);
+          });
+      });
+    });
+
+    router.post('/v1/service/sardine/currencyLimits', (req, res) => {
+      let server;
+      try {
+        server = getServer(req, res);
+      } catch (ex) {
+        return returnError(ex, res, req);
+      }
+
+      server
+        .sardineGetCurrencyLimits(req)
+        .then(response => {
+          res.json(response);
+        })
+        .catch(err => {
+          return returnError(err ?? 'unknown', res, req);
+        });
+    });
+
+    router.post('/v1/service/sardine/ordersDetails', (req, res) => {
+      let server;
+      try {
+        server = getServer(req, res);
+      } catch (ex) {
+        return returnError(ex, res, req);
+      }
+
+      server
+        .sardineGetOrdersDetails(req)
+        .then(response => {
+          res.json(response);
+        })
+        .catch(err => {
+          return returnError(err ?? 'unknown', res, req);
+        });
+    });
+
     router.post('/v1/service/simplex/quote', (req, res) => {
       getServerWithAuth(req, res, server => {
         server
@@ -1601,7 +1672,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1614,7 +1685,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1628,7 +1699,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1641,7 +1712,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1654,7 +1725,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1672,7 +1743,7 @@ export class ExpressApp {
           res.json(response);
         })
         .catch(err => {
-          if (err) return returnError(err, res, req);
+          return returnError(err ?? 'unknown', res, req);
         });
     });
 
@@ -1684,7 +1755,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1697,7 +1768,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1710,9 +1781,26 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
+    });
+
+    router.post('/v1/service/changelly/getTransactions', (req, res) => {
+      let server;
+      try {
+        server = getServer(req, res);
+      } catch (ex) {
+        return returnError(ex, res, req);
+      }
+      server
+        .changellyGetTransactions(req)
+        .then(response => {
+          res.json(response);
+        })
+        .catch(err => {
+          return returnError(err ?? 'unknown', res, req);
+        });
     });
 
     router.post('/v1/service/changelly/getStatus', (req, res) => {
@@ -1728,7 +1816,7 @@ export class ExpressApp {
           res.json(response);
         })
         .catch(err => {
-          if (err) return returnError(err, res, req);
+          return returnError(err ?? 'unknown', res, req);
         });
     });
 
@@ -1745,7 +1833,7 @@ export class ExpressApp {
           res.json(response);
         })
         .catch(err => {
-          if (err) return returnError(err, res, req);
+          return returnError(err ?? 'unknown', res, req);
         });
     });
 
@@ -1757,7 +1845,7 @@ export class ExpressApp {
             res.json(response);
           })
           .catch(err => {
-            if (err) return returnError(err, res, req);
+            return returnError(err ?? 'unknown', res, req);
           });
       });
     });
@@ -1775,7 +1863,7 @@ export class ExpressApp {
           res.json(response);
         })
         .catch(err => {
-          if (err) return returnError(err, res, req);
+          return returnError(err ?? 'unknown', res, req);
         });
     });
 
@@ -1811,7 +1899,7 @@ export class ExpressApp {
           res.json(response);
         })
         .catch(err => {
-          if (err) return returnError(err, res, req);
+          return returnError(err ?? 'unknown', res, req);
         });
     });
 

@@ -231,7 +231,7 @@ export class WalletService implements IWalletService {
         lock = opts.lock || new Lock(storage);
 
         if (err) {
-          logger.error('Could not initialize', err);
+          logger.error('Could not initialize: %o', err);
           throw err;
         }
         initialized = true;
@@ -389,6 +389,12 @@ export class WalletService implements IWalletService {
     this.lock.runLocked(this.walletId, { waitTime }, cb, task);
   }
   logi(message, ...args) {
+    if (typeof message === 'string' && args.length > 0 && !message.endsWith('%o')) {
+      for (let i = 0; i < args.length; i++) {
+        message += ' %o';
+      }
+    }
+
     if (!this || !this.walletId) {
       return logger.warn(message, ...args);
     }
@@ -398,6 +404,12 @@ export class WalletService implements IWalletService {
   }
 
   logw(message, ...args) {
+    if (typeof message === 'string' && args.length > 0 && !message.endsWith('%o')) {
+      for (let i = 0; i < args.length; i++) {
+        message += ' %o';
+      }
+    }
+  
     if (!this || !this.walletId) {
       return logger.warn(message, ...args);
     }
@@ -407,6 +419,12 @@ export class WalletService implements IWalletService {
   }
 
   logd(message, ...args) {
+    if (typeof message === 'string' && args.length > 0 && !message.endsWith('%o')) {
+      for (let i = 0; i < args.length; i++) {
+        message += ' %o';
+      }
+    }
+
     if (!this || !this.walletId) {
       return logger.verbose(message, ...args);
     }
@@ -2808,7 +2826,7 @@ export class WalletService implements IWalletService {
         {
           txProposalId: opts.txProposalId
         },
-        (err, txp) => {
+        async (err, txp) => {
           if (err) return cb(err);
 
           if (opts.maxTxpVersion < txp.version) {
@@ -2827,6 +2845,19 @@ export class WalletService implements IWalletService {
           if (!txp.isPending()) return cb(Errors.TX_NOT_PENDING);
 
           if (txp.signingMethod === 'schnorr' && !opts.supportBchSchnorr) return cb(Errors.UPGRADE_NEEDED);
+
+          if (Constants.EVM_CHAINS[wallet.chain.toUpperCase()]) {
+            try {
+              const txps = await this.getPendingTxsPromise({});
+              for (let t of txps) {
+                if (t.id !== txp.id && t.nonce <= txp.nonce && t.status !== 'rejected') {
+                  return cb(Errors.TX_NONCE_CONFLICT);
+                }
+              }  
+            } catch (err) {
+              return cb(err);
+            }            
+          }
 
           const copayer = wallet.getCopayer(this.copayerId);
 
@@ -2934,7 +2965,7 @@ export class WalletService implements IWalletService {
             isCreator: true
           });
           this.storage.storeTxConfirmationSub(sub, err => {
-            if (err) logger.error('Could not store Tx confirmation subscription: ', err);
+            if (err) logger.error('Could not store Tx confirmation subscription: %o', err);
 
             let raw;
             try {
@@ -2945,9 +2976,9 @@ export class WalletService implements IWalletService {
             this._broadcastRawTx(wallet.chain, wallet.network, raw, (err, txid) => {
               if (err || txid != txp.txid) {
                 if (!err || txp.txid != txid) {
-                  logger.warn(`Broadcast failed for: ${raw}`);
+                  logger.warn('Broadcast failed for: %o', raw);
                 } else {
-                  logger.warn(`Broadcast failed: ${err}`);
+                  logger.warn('Broadcast failed: %o', err);
                 }
 
                 const broadcastErr = err;
@@ -3121,6 +3152,15 @@ export class WalletService implements IWalletService {
         );
       });
     }
+  }
+
+  getPendingTxsPromise(opts): Promise<any>  {
+    return new Promise((resolve, reject) => {
+      this.getPendingTxs(opts, (err, txps) => {
+        if (err) return reject(err);
+        return resolve(txps)
+      });
+    });
   }
 
   /**
@@ -3423,7 +3463,7 @@ export class WalletService implements IWalletService {
           if (isOK) {
             logger.debug('Wallet Sync Check OK');
           } else {
-            logger.warn('ERROR: Wallet check failed:', localCheck, serverCheck);
+            logger.warn('ERROR: Wallet check failed: %o', { localCheck, serverCheck });
             return cb(null, isOK);
           }
 
@@ -3913,7 +3953,7 @@ export class WalletService implements IWalletService {
         next => {
           if (skip == 0 || !streamKey) return next();
 
-          logger.debug('Checking streamKey/skip', streamKey, skip);
+          logger.debug('Checking streamKey/skip %o', { streamKey, skip });
           this.storage.getTxHistoryStreamV8(walletCacheKey, (err, result) => {
             if (err) return next(err);
             if (!result) return next();
@@ -3935,7 +3975,7 @@ export class WalletService implements IWalletService {
           }
 
           const startBlock = cacheStatus.updatedHeight || 0;
-          logger.debug(' ########### GET HISTORY v8 startBlock/bcH]', startBlock, bcHeight); // TODO
+          logger.debug(' ########### GET HISTORY v8 startBlock/bcH] %o', { startBlock, bcHeight });
 
           bc.getTransactions(wallet, startBlock, (err, txs) => {
             if (err) return cb(err);
@@ -4538,9 +4578,10 @@ export class WalletService implements IWalletService {
    * @param {string} opts.currentLocationState - (Optional) State where the user is currently located.
    * @param {string} opts.bitpayIdLocationCountry - (Optional) Country registered as address of the user logged in with BitpayId.
    * @param {string} opts.bitpayIdLocationState - (Optional) State registered as address of the user logged in with BitpayId.
+   * @param {Object} opts.platform - (Optional) Operating system and version of the user's device.
    */
   getServicesData(opts, cb) {
-    let externalServicesConfig: ExternalServicesConfig = config.services;
+    let externalServicesConfig: ExternalServicesConfig = _.cloneDeep(config.services);
 
     const isLoggedIn = !!opts?.bitpayIdLocationCountry;
     const usaBannedStates = ['HI', 'LA', 'NY'];
@@ -4552,6 +4593,10 @@ export class WalletService implements IWalletService {
       (!isLoggedIn && ['US', 'USA'].includes(opts?.currentLocationCountry?.toUpperCase()) && usaBannedStates.includes(opts?.currentLocationState?.toUpperCase()))
     ) {
       externalServicesConfig.swapCrypto = {...externalServicesConfig.swapCrypto, ...{ disabled: true, disabledMessage:'Swaps are currently unavailable in your area.'}};
+    }
+
+    if (opts?.platform?.os === 'ios' && opts?.currentAppVersion === '14.11.5') {
+      externalServicesConfig.swapCrypto = {...externalServicesConfig.swapCrypto, ...{ disabled: true, disabledTitle:'Unavailable', disabledMessage:'Swaps are currently unavailable in your area.'}};
     }
 
     return cb(null, externalServicesConfig);
@@ -4608,6 +4653,45 @@ export class WalletService implements IWalletService {
       if (req.body.areFeesIncluded) qs.push('areFeesIncluded=' + req.body.areFeesIncluded);
 
       const URL: string = API + `/v3/currencies/${req.body.currencyAbbreviation}/buy_quote/?${qs.join('&')}`;
+
+      this.request.get(
+        URL,
+        {
+          headers,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ? err.body : err);
+          } else {
+            return resolve(data.body ? data.body : data);
+          }
+        }
+      );
+    });
+  }
+
+  moonpayGetCurrencyLimits(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const keys = this.moonpayGetKeys(req);
+      const API = keys.API;
+      const API_KEY = keys.API_KEY;
+
+      if (!checkRequired(req.body, ['currencyAbbreviation', 'baseCurrencyCode'])) {
+        return reject(new ClientError("Moonpay's request missing arguments"));
+      }
+
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+
+      let qs = [];
+      qs.push('apiKey=' + API_KEY);
+      qs.push('baseCurrencyCode=' + encodeURIComponent(req.body.baseCurrencyCode));
+      if (req.body.areFeesIncluded) qs.push('areFeesIncluded=' + encodeURIComponent(req.body.areFeesIncluded));
+      if (req.body.paymentMethod) qs.push('paymentMethod=' + encodeURIComponent(req.body.paymentMethod));
+
+      const URL = API + `/v3/currencies/${req.body.currencyAbbreviation}/limits/?${qs.join('&')}`
 
       this.request.get(
         URL,
@@ -4804,21 +4888,30 @@ export class WalletService implements IWalletService {
   }
 
   rampGetSignedPaymentUrl(req): { urlWithSignature: string } {
+    const webRequiredParams = [
+      'swapAsset',
+      'userAddress',
+      'selectedCountryCode',
+      'finalUrl',
+    ];
+    const appRequiredParams = [
+      'swapAsset',
+      'swapAmount',
+      'enabledFlows',
+      'defaultFlow',
+      'userAddress',
+      'selectedCountryCode',
+      'defaultAsset',
+      'finalUrl',
+    ];
+
+    const requiredParams = req.body.context === 'web' ? webRequiredParams : appRequiredParams;
     const keys = this.rampGetKeys(req);
     const API_KEY = keys.API_KEY;
     const WIDGET_API = keys.WIDGET_API;
 
     if (
-      !checkRequired(req.body, [
-        'swapAsset',
-        'swapAmount',
-        'enabledFlows',
-        'defaultFlow',
-        'userAddress',
-        'selectedCountryCode',
-        'defaultAsset',
-        'finalUrl',
-      ])
+      !checkRequired(req.body, requiredParams)
     ) {
       throw new ClientError("Ramp's request missing arguments");
     }
@@ -4830,16 +4923,17 @@ export class WalletService implements IWalletService {
     let qs = [];
     qs.push('hostApiKey=' + API_KEY);
     qs.push('swapAsset=' + encodeURIComponent(req.body.swapAsset));
-    qs.push('swapAmount=' + encodeURIComponent(req.body.swapAmount));
-    qs.push('enabledFlows=' + encodeURIComponent(req.body.enabledFlows));
-    qs.push('defaultFlow=' + encodeURIComponent(req.body.defaultFlow));
     qs.push('userAddress=' + encodeURIComponent(req.body.userAddress));
     qs.push('selectedCountryCode=' + encodeURIComponent(req.body.selectedCountryCode));
-    qs.push('defaultAsset=' + encodeURIComponent(req.body.defaultAsset));
     qs.push('finalUrl=' + encodeURIComponent(req.body.finalUrl));
+    if (req.body.enabledFlows) qs.push('enabledFlows=' + encodeURIComponent(req.body.enabledFlows));
+    if (req.body.defaultFlow) qs.push('defaultFlow=' + encodeURIComponent(req.body.defaultFlow));
     if (req.body.hostLogoUrl) qs.push('hostLogoUrl=' + encodeURIComponent(req.body.hostLogoUrl));
     if (req.body.hostAppName) qs.push('hostAppName=' + encodeURIComponent(req.body.hostAppName));
+    if (req.body.swapAmount) qs.push('swapAmount=' + encodeURIComponent(req.body.swapAmount));
     if (req.body.fiatValue) qs.push('fiatValue=' + encodeURIComponent(req.body.fiatValue));
+    if (req.body.fiatCurrency) qs.push('fiatCurrency=' + encodeURIComponent(req.body.fiatCurrency));
+    if (req.body.defaultAsset) qs.push('defaultAsset=' + encodeURIComponent(req.body.defaultAsset));
     if (req.body.userEmailAddress) qs.push('userEmailAddress=' + encodeURIComponent(req.body.userEmailAddress));
 
     const URL_SEARCH: string = `?${qs.join('&')}`;
@@ -4871,6 +4965,201 @@ export class WalletService implements IWalletService {
     }
   
       URL = API + `/host-api/v3/assets?${qs.join('&')}`;
+
+      this.request.get(
+        URL,
+        {
+          headers,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ? err.body : err);
+          } else {
+            return resolve(data.body ? data.body : data);
+          }
+        }
+      );
+    });
+  }
+
+  private sardineGetKeys(req) {
+    if (!config.sardine) throw new Error('Sardine missing credentials');
+
+    let env: 'sandbox' | 'production' | 'sandboxWeb' | 'productionWeb';
+    env = req.body.env === 'production' ? 'production' : 'sandbox';
+    if (req.body.context === 'web') {
+      env += 'Web';
+    }
+    delete req.body.env;
+    delete req.body.context;
+
+    const keys: {
+      API: string;
+      SECRET_KEY: string;
+      CLIENT_ID: string;
+    } = {
+      API: config.sardine[env].api,
+      SECRET_KEY: config.sardine[env].secretKey,
+      CLIENT_ID: config.sardine[env].clientId,
+    };
+
+    return keys;
+  }
+
+  sardineGetQuote(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const keys = this.sardineGetKeys(req);
+      const API = keys.API;
+      const CLIENT_ID = keys.CLIENT_ID;
+      const SECRET_KEY = keys.SECRET_KEY;
+
+      if (!checkRequired(req.body, ['asset_type', 'network', 'total'])) {
+        return reject(new ClientError("Sardine's request missing arguments"));
+      }
+
+      const secret = `${CLIENT_ID}:${SECRET_KEY}`;
+      const secretBase64 = Buffer.from(secret).toString('base64');
+
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Basic ${secretBase64}`,
+      };
+
+      let qs = [];
+      qs.push('asset_type=' + req.body.asset_type);
+      qs.push('network=' + req.body.network);
+      qs.push('total=' + req.body.total);
+
+      if (req.body.currency) qs.push('currency=' + req.body.currency);
+      if (req.body.paymentType) qs.push('paymentType=' + req.body.paymentType);
+      if (req.body.quote_type) qs.push('quote_type=' + req.body.quote_type);
+
+      const URL: string = API + `/v1/quotes?${qs.join('&')}`;
+
+      this.request.get(
+        URL,
+        {
+          headers,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ? err.body : err);
+          } else {
+            return resolve(data.body ? data.body : data);
+          }
+        }
+      );
+    });
+  }
+
+  sardineGetCurrencyLimits(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const keys = this.sardineGetKeys(req);
+      const API = keys.API;
+      const CLIENT_ID = keys.CLIENT_ID;
+      const SECRET_KEY = keys.SECRET_KEY;
+
+      const secret = `${CLIENT_ID}:${SECRET_KEY}`;
+      const secretBase64 = Buffer.from(secret).toString('base64');
+
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Basic ${secretBase64}`,
+      };
+
+      const URL: string = API + '/v1/fiat-currencies';
+
+      this.request.get(
+        URL,
+        {
+          headers,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ? err.body : err);
+          } else {
+            return resolve(data.body ? data.body : data);
+          }
+        }
+      );
+    });
+  }
+
+  sardineGetToken(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const keys = this.sardineGetKeys(req);
+      const API = keys.API;
+      const CLIENT_ID = keys.CLIENT_ID;
+      const SECRET_KEY = keys.SECRET_KEY;
+
+      if (!checkRequired(req.body, ['referenceId', 'externalUserId'])) {
+        return reject(new ClientError("Sardine's request missing arguments"));
+      }
+
+      const secret = `${CLIENT_ID}:${SECRET_KEY}`;
+      const secretBase64 = Buffer.from(secret).toString('base64');
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${secretBase64}`,
+      };
+
+      const URL: string = API + '/v1/auth/client-tokens';
+
+      this.request.post(
+        URL,
+        {
+          headers,
+          body: req.body,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ? err.body : err);
+          } else {
+            return resolve(data.body ? data.body : data);
+          }
+        }
+      );
+    });
+  }
+
+  sardineGetOrdersDetails(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const keys = this.sardineGetKeys(req);
+      const API = keys.API;
+      const CLIENT_ID = keys.CLIENT_ID;
+      const SECRET_KEY = keys.SECRET_KEY;
+
+      if (!checkRequired(req.body, ['orderId']) && !checkRequired(req.body, ['externalUserId']) && !checkRequired(req.body, ['referenceId'])) {
+        return reject(new ClientError("Sardine's request missing arguments"));
+      }
+
+      const secret = `${CLIENT_ID}:${SECRET_KEY}`;
+      const secretBase64 = Buffer.from(secret).toString('base64');
+
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Basic ${secretBase64}`,
+      };
+
+      let qs = [];
+      let URL: string;
+
+      if (req.body.orderId) {
+        URL = API + `/v1/orders/${req.body.orderId}`;
+      } else if (req.body.externalUserId || req.body.referenceId){
+        if (req.body.externalUserId) qs.push('externalUserId=' + req.body.externalUserId);
+        if (req.body.referenceId) qs.push('referenceId=' + req.body.referenceId);
+        if (req.body.startDate) qs.push('startDate=' + req.body.startDate);
+        if (req.body.endDate) qs.push('endDate=' + req.body.endDate);
+        if (req.body.limit) qs.push('limit=' + req.body.limit);
+
+        URL = API + `/v1/orders?${qs.join('&')}`;
+      }
 
       this.request.get(
         URL,
@@ -5438,6 +5727,66 @@ export class WalletService implements IWalletService {
           rateId: req.body.fixedRateId,
           refundAddress: req.body.refundAddress
         }
+      };
+
+      const URL: string = keys.API;
+
+      if (req.body.useV2) {
+        const {signature, publicKey} = this.changellySignRequestsV2(message, keys.SECRET);
+        headers = {
+          'Content-Type': 'application/json',
+          'X-Api-Key': crypto.createHash('sha256').update(publicKey).digest('base64'),
+          'X-Api-Signature': signature.toString('base64'),
+        };
+      } else {
+        const sign: string = this.changellySignRequests(message, keys.SECRET);
+        headers = {
+          'Content-Type': 'application/json',
+          sign,
+          'api-key': keys.API_KEY
+        };
+      }
+
+      this.request.post(
+        URL,
+        {
+          headers,
+          body: message,
+          json: true
+        },
+        (err, data) => {
+          if (err) {
+            return reject(err.body ?? err);
+          } else {
+            return resolve(data.body);
+          }
+        }
+      );
+    });
+  }
+
+  changellyGetTransactions(req): Promise<any> {
+    return new Promise((resolve, reject) => {
+      let keys, headers;
+      if (req.body.useV2) {
+        keys = this.changellyGetKeysV2(req);
+      } else {
+        keys = this.changellyGetKeys(req);
+      }
+
+      if (!checkRequired(req.body, ['id', 'exchangeTxId'])) {
+        return reject(new ClientError('changellyGetTransactions request missing arguments'));
+      }
+
+      const message = {
+        id: req.body.id,
+        jsonrpc: '2.0',
+        method: 'getTransactions',
+        params:
+          {
+            id: req.body.exchangeTxId,
+            limit: req.body.limit ?? 1,
+          }
       };
 
       const URL: string = keys.API;
