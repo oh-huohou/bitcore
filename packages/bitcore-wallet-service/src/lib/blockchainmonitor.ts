@@ -38,6 +38,8 @@ const throttledNewBlocks = throttle((bcmContext, chain, network, hash) => {
   bcmContext._handleTxConfirmations(chain, network, hash);
 }) as throttledNewBlocksFnType;
 
+//用于监视多个区块链的新块和交易确认，并处理交易广播
+
 export class BlockchainMonitor {
   explorers: any;
   storage: Storage;
@@ -52,6 +54,20 @@ export class BlockchainMonitor {
   lastTx: Array<string>;
   Nix: number;
 
+  //该方法的作用是启动区块链监视器，并通过回调函数通知启动状态。
+  /**
+   * 实例变量
+   *  explorers：一个包含所有区块链浏览器的对象。
+      storage：一个指向存储实例的引用。
+      messageBroker：一个指向消息代理实例的引用。
+      lock：一个指向锁实例的引用。
+      blockThrottleSettings：一个包含每个链和网络的块限流时间（以秒为单位）的对象。
+      last：一个存储最新块哈希的数组。
+      Ni：一个计数器，用于限制处理相同块哈希的次数。
+      N：限制处理相同块哈希的事件数。
+      lastTx：一个存储最近交易哈希的数组。
+      Nix：一个计数器，用于限制处理相同交易哈希的次数。
+   */
   start(opts, cb) {
     opts = opts || {};
 
@@ -60,8 +76,16 @@ export class BlockchainMonitor {
     this.Ni = this.Nix = 0;
     this.last = this.lastTx = [];
 
+    /**
+     * 异步parallel()方法并行执行一些初始化工作，包括：
+     * 初始化区块链浏览器（explorer）。
+      连接存储（storage）。
+       连接消息代理（message broker）。
+       初始化锁（lock）。
+    */
     async.parallel(
       [
+        //初始化区块链浏览器（explorer）。
         done => {
           this.explorers = {
             btc: {},
@@ -117,6 +141,7 @@ export class BlockchainMonitor {
           });
           done();
         },
+        //连接存储（storage）。
         done => {
           if (opts.storage) {
             this.storage = opts.storage;
@@ -132,15 +157,18 @@ export class BlockchainMonitor {
             );
           }
         },
+        //连接消息代理（message broker）。
         done => {
           this.messageBroker = opts.messageBroker || new MessageBroker(opts.messageBrokerOpts);
           done();
         },
+        //初始化锁（lock）。
         done => {
           this.lock = opts.lock || new Lock(this.storage);
           done();
         }
       ],
+      //如果执行期间出现错误，则会将错误记录在日志中，并通过回调函数通知调用方。
       err => {
         if (err) {
           logger.error(err);

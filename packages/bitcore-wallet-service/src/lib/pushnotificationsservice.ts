@@ -19,44 +19,58 @@ const Defaults = Common.Defaults;
 const Constants = Common.Constants;
 const sjcl = require('sjcl');
 
+// push notification type
 const PUSHNOTIFICATIONS_TYPES = {
+  //新加入钱包的合作者
   NewCopayer: {
     filename: 'new_copayer'
   },
+  //钱包备份已完成
   WalletComplete: {
     filename: 'wallet_complete'
   },
+  //新的交易提案被创建
   NewTxProposal: {
     filename: 'new_tx_proposal'
   },
+  //发送新的交易（指出）
   NewOutgoingTx: {
     filename: ['new_outgoing_tx', 'new_zero_outgoing_tx']
   },
+  //接收新的交易（收入）
   NewIncomingTx: {
     filename: ['new_incoming_tx_testnet', 'new_incoming_tx']
   },
+  //交易提案被拒绝
   TxProposalFinallyRejected: {
     filename: 'txp_finally_rejected'
   },
+  //交易被确认
   TxConfirmation: {
     filename: ['tx_confirmation_sender', 'tx_confirmation_receiver']
   },
+  //生成新的钱包地址
   NewAddress: {
     dataOnly: true
   },
+  //新的区块
   NewBlock: {
     dataOnly: true,
     broadcastToActiveUsers: true
   },
+  //交易提案被某个用户接受
   TxProposalAcceptedBy: {
     dataOnly: true
   },
+  //交易提案最终被接受
   TxProposalFinallyAccepted: {
     dataOnly: true
   },
+  //交易提案被某个用户拒绝
   TxProposalRejectedBy: {
     dataOnly: true
   },
+  //交易提案被移除
   TxProposalRemoved: {
     dataOnly: true
   }

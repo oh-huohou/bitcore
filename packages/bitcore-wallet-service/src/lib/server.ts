@@ -1893,6 +1893,12 @@ export class WalletService implements IWalletService {
     });
   }
 
+  /**
+   * 获取一个名为bc的区块链浏览器实例，如果无法获取，则返回一个错误给回调函数cb。
+   * 然后，它使用bc.estimateFee函数来估算每个点（points数组中的每个元素）的费用。
+   * 如果估算出错，则会记录错误并返回给回调函数cb。
+   * 如果估算成功，则将结果存储在一个名为levels的对象中，其中每个点对应一个费用。最后，函数调用回调函数cb，并将levels、failed.length返回给它。
+   */
   _sampleFeeLevels(chain, network, points, cb) {
     const bc = this._getBlockchainExplorer(chain, network);
     if (!bc) return cb(new Error('Could not get blockchain explorer instance'));
@@ -1943,27 +1949,13 @@ export class WalletService implements IWalletService {
 
     const cacheKey = 'feeLevel:' + opts.chain + ':' + opts.network;
 
+    //todo 根据 chain 和 network 属性的值从缓存中获取对应的 feeLevels
+    //如果获取到了缓存值，则返回缓存值
     this.storage.checkAndUseGlobalCache(cacheKey, Defaults.FEE_LEVEL_CACHE_DURATION, (err, values, oldvalues) => {
       if (err) return cb(err);
       if (values) return cb(null, values, true);
 
       const feeLevels = Defaults.FEE_LEVELS[opts.chain];
-
-      /*
-      if (opts.chain === 'doge') {
-        const defaultDogeFeeLevels = feeLevels[0];
-        const result: {
-          feePerKb?: number;
-          nbBlocks?: number;
-          level: string;
-        } = {
-          level: defaultDogeFeeLevels.name,
-          nbBlocks: defaultDogeFeeLevels.nbBlocks,
-          feePerKb: defaultDogeFeeLevels.defaultValue
-        };
-        return cb(null, [result]);
-      }
-      */
 
       const samplePoints = () => {
         const definedPoints = _.uniq(_.map(feeLevels, 'nbBlocks'));
@@ -1997,6 +1989,11 @@ export class WalletService implements IWalletService {
         return result;
       };
 
+      /**
+       * 否则，函数会调用 _sampleFeeLevels 函数从存储中获取 feeSamples 的值，
+       * 并使用 feeLevels 和 feeSamples 计算出每个 level 的 feePerKb 和 nbBlocks 值，
+       * 最终将结果存储在 values 数组中，并将 values 缓存起来，然后返回 values。
+       */
       this._sampleFeeLevels(opts.chain, opts.network, samplePoints(), (err, feeSamples, failed) => {
         if (err) {
           if (oldvalues) {

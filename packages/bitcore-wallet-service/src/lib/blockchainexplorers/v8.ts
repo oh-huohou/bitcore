@@ -469,6 +469,14 @@ export class V8 {
       });
   }
 
+  /**
+   * 
+   * 这段代码的作用是估算不同块高度（nbBlocks）的交易手续费。
+   * 它首先检查传入的nbBlocks参数，如果未定义则默认为[1, 2, 6, 24]。
+   * 然后，它使用异步each函数迭代这些块高度，对每个块高度执行一次HTTP GET请求来获取该块高度的交易手续费。
+   * 请求返回后，代码将响应解析为JSON格式，仅在响应中包含正确的块高度时才处理响应。
+   * 最终，代码将估算的手续费作为对象（result）传递给回调函数cb。 
+   */
   estimateFee(nbBlocks, cb) {
     nbBlocks = nbBlocks || [1, 2, 6, 24];
     const result = {};
@@ -476,6 +484,7 @@ export class V8 {
     async.each(
       nbBlocks,
       (x: string, icb) => {
+        //https://api.bitpay.com/fee/6
         const url = this.baseUrl + '/fee/' + x;
         this.request
           .get(url, {})

@@ -900,6 +900,12 @@ export class ExpressApp {
       });
     });
 
+    /**
+     * todo
+     * 从请求参数中获取币种、网络、链等信息，
+     * 然后使用这些参数获取服务器实例并调用 getFeeLevels() 方法来获取指定币种和网络的费率等级信息。
+     * 最后将获取到的信息以 JSON 格式返回给客户端。如果出现错误，会调用 returnError() 方法返回错误信息给客户端。
+     */
     router.get('/v2/feelevels/', (req, res) => {
       const opts: { coin?: string; network?: string; chain?: string } = {};
       SetPublicCache(res, 1 * ONE_MINUTE);
